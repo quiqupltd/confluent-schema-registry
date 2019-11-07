@@ -45,7 +45,7 @@ export default class SchemaRegistry {
       throw new ConfluentSchemaRegistryArgumentError(`Invalid namespace: ${schema.namespace}`)
     }
 
-    const subject = [schema.namespace, schema.name, schemaSuffix].filter(s => s).join(separator)
+    const subject = `${[schema.namespace, schema.name].join(separator)}${schemaSuffix}`
 
     try {
       const response = await this.api.Subject.config({ subject })
