@@ -35,17 +35,7 @@ export default class SchemaRegistry {
   }
 
   public async register(schema: Schema, userOpts?: Opts): Promise<RegisteredSchema> {
-    const { compatibility, separator } = { ...DEFAULT_OPTS, ...userOpts }
-
-    if (userOpts) {
-      if (userOpts.schemaName) {
-        schema.name = userOpts.schemaName
-      }
-
-      if (userOpts.schemaSuffix) {
-        schema.name = `${schema.name}${userOpts.schemaSuffix}`
-      }
-    }
+    const { compatibility, separator, schemaSuffix } = { ...DEFAULT_OPTS, ...userOpts }
 
     if (!schema.name) {
       throw new ConfluentSchemaRegistryArgumentError(`Invalid name: ${schema.name}`)
@@ -55,7 +45,7 @@ export default class SchemaRegistry {
       throw new ConfluentSchemaRegistryArgumentError(`Invalid namespace: ${schema.namespace}`)
     }
 
-    const subject = [schema.namespace, schema.name].join(separator)
+    const subject = [schema.namespace, schema.name, schemaSuffix].filter(s => s).join(separator)
 
     try {
       const response = await this.api.Subject.config({ subject })
