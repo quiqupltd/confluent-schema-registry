@@ -14,6 +14,7 @@ interface RegisteredSchema {
 }
 
 interface Opts {
+  schemaName?: string
   compatibility?: COMPATIBILITY
   separator?: string
 }
@@ -34,6 +35,10 @@ export default class SchemaRegistry {
 
   public async register(schema: Schema, userOpts?: Opts): Promise<RegisteredSchema> {
     const { compatibility, separator } = { ...DEFAULT_OPTS, ...userOpts }
+
+    if (userOpts && userOpts.schemaName) {
+      schema.name = userOpts.schemaName
+    }
 
     if (!schema.name) {
       throw new ConfluentSchemaRegistryArgumentError(`Invalid name: ${schema.name}`)

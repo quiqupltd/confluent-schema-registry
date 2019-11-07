@@ -49,6 +49,17 @@ describe('SchemaRegistry', () => {
       await expect(schemaRegistry.register(Schema)).resolves.toEqual({ id: expect.any(Number) })
     })
 
+    it('uploads the new schema with a custom schemaName', async () => {
+      await expect(api.Subject.latestVersion({ subject })).rejects.toHaveProperty(
+        'message',
+        `${DEFAULT_API_CLIENT_ID} - Subject not found.`,
+      )
+
+      await expect(
+        schemaRegistry.register(Schema, { schemaName: 'alternate-name' }),
+      ).resolves.toEqual({ id: expect.any(Number) })
+    })
+
     it('automatically cache the id and schema', async () => {
       const { id } = await schemaRegistry.register(Schema)
 
@@ -57,8 +68,8 @@ describe('SchemaRegistry', () => {
 
     it('fetch and validate the latest schema id after registering a new schema', async () => {
       const { id } = await schemaRegistry.register(Schema)
-      const latestSchemaId = await schemaRegistry.getLatestSchemaId(subject);
-      expect(id).toBe(latestSchemaId);
+      const latestSchemaId = await schemaRegistry.getLatestSchemaId(subject)
+      expect(id).toBe(latestSchemaId)
     })
 
     it('set the default compatibility to BACKWARD', async () => {
