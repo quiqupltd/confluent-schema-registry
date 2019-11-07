@@ -15,6 +15,7 @@ interface RegisteredSchema {
 
 interface Opts {
   schemaName?: string
+  schemaSuffix?: string
   compatibility?: COMPATIBILITY
   separator?: string
 }
@@ -36,8 +37,14 @@ export default class SchemaRegistry {
   public async register(schema: Schema, userOpts?: Opts): Promise<RegisteredSchema> {
     const { compatibility, separator } = { ...DEFAULT_OPTS, ...userOpts }
 
-    if (userOpts && userOpts.schemaName) {
-      schema.name = userOpts.schemaName
+    if (userOpts) {
+      if (userOpts.schemaName) {
+        schema.name = userOpts.schemaName
+      }
+
+      if (userOpts.schemaSuffix) {
+        schema.name = `${schema.name}${userOpts.schemaSuffix}`
+      }
     }
 
     if (!schema.name) {
