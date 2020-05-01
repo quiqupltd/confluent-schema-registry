@@ -1,11 +1,31 @@
-import fs from 'fs'
-import avro from 'avsc'
+import * as fs from 'fs'
+import { assembleProtocol, readProtocol } from 'avsc'
+
+import { ConfluentSchemaRegistryError } from '../errors'
+
+interface AssembleProtocolError extends Error {
+  path: string
+}
+interface Obj {
+  [key: string]: any
+}
+interface Iterable extends Obj {
+  map: any
+}
+interface Field {
+  type: {
+    type: string
+    items: any
+  }
+}
 
 let cache: any
 const merge = Object.assign
-const isObject = (obj: any) => obj && typeof obj === 'object'
-const isIterable = (obj: any) => isObject(obj) && typeof obj.map !== 'undefined'
-const isFieldArray = (field: any) => isObject(field.type) && field.type.type === 'array'
+const isObject = (obj: unknown): obj is Obj => obj && typeof obj === 'object'
+const isIterable = (obj: unknown): obj is Iterable =>
+  isObject(obj) && typeof obj.map !== 'undefined'
+const isFieldArray = (field: unknown): field is Field =>
+  isObject(field) && isObject(field.type) && field.type.type === 'array'
 
 const combine = (rootType: any, types: any) => {
   if (!rootType.fields) {
@@ -62,9 +82,25 @@ const combine = (rootType: any, types: any) => {
   return merge(rootType, { fields: combinedFields })
 }
 
-export default (path: any) => {
+export function avdlToAVSC(path: any) {
   cache = {}
-  const protocol = avro.readProtocol(fs.readFileSync(path, 'utf8'))
+  const protocol = readProtocol(fs.readFileSync(path, 'utf8'))
+
+  return merge({ namespace: protocol.namespace }, combine(protocol.types.pop(), protocol.types))
+}
+
+export async function avdlToAVSCAsync(path: string) {
+  cache = {}
+
+  const protocol: { [key: string]: any } = await new Promise((resolve, reject) => {
+    assembleProtocol(path, (err: AssembleProtocolError, schema) => {
+      if (err) {
+        reject(new ConfluentSchemaRegistryError(`${err.message}. Caused by: ${err.path}`))
+      } else {
+        resolve(schema)
+      }
+    })
+  })
 
   return merge({ namespace: protocol.namespace }, combine(protocol.types.pop(), protocol.types))
 }

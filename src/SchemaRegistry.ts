@@ -1,9 +1,16 @@
+import { Response } from 'mappersmith'
+
 import { encode, MAGIC_BYTE } from './encoder'
 import decode from './decoder'
 import { COMPATIBILITY, DEFAULT_SEPERATOR } from './constants'
-import API, { SchemaRegistryAPIClientArgs, SchemaRegistryAPIClient } from './api'
+import API, {
+  SchemaRegistryAPIClientArgs,
+  SchemaRegistryAPIClientOptions,
+  SchemaRegistryAPIClient,
+} from './api'
 import Cache from './cache'
 import {
+  ConfluentSchemaRegistryError,
   ConfluentSchemaRegistryArgumentError,
   ConfluentSchemaRegistryCompatibilityError,
 } from './errors'
@@ -18,6 +25,7 @@ interface Opts {
   schemaSuffix?: string
   compatibility?: COMPATIBILITY
   separator?: string
+  subject?: string
 }
 
 const DEFAULT_OPTS = {
@@ -27,15 +35,20 @@ const DEFAULT_OPTS = {
 
 export default class SchemaRegistry {
   private api: SchemaRegistryAPIClient
+  private cacheMissRequests: { [key: number]: Promise<Response> } = {}
+
   public cache: Cache
 
-  constructor({ auth, clientId, host, retry }: SchemaRegistryAPIClientArgs) {
+  constructor(
+    { auth, clientId, host, retry }: SchemaRegistryAPIClientArgs,
+    options?: SchemaRegistryAPIClientOptions,
+  ) {
     this.api = API({ auth, clientId, host, retry })
-    this.cache = new Cache()
+    this.cache = new Cache(options?.forSchemaOptions)
   }
 
   public async register(schema: Schema, userOpts?: Opts): Promise<RegisteredSchema> {
-    const { compatibility, separator, schemaSuffix } = { ...DEFAULT_OPTS, ...userOpts }
+    const { compatibility, separator } = { ...DEFAULT_OPTS, ...userOpts }
 
     if (!schema.name) {
       throw new ConfluentSchemaRegistryArgumentError(`Invalid name: ${schema.name}`)
@@ -45,7 +58,12 @@ export default class SchemaRegistry {
       throw new ConfluentSchemaRegistryArgumentError(`Invalid namespace: ${schema.namespace}`)
     }
 
-    const subject = `${[schema.namespace, schema.name].join(separator)}${schemaSuffix}`
+    let subject: string
+    if (userOpts && userOpts.subject) {
+      subject = userOpts.subject
+    } else {
+      subject = [schema.namespace, schema.name].join(separator)
+    }
 
     try {
       const response = await this.api.Subject.config({ subject })
@@ -80,11 +98,12 @@ export default class SchemaRegistry {
 
   public async getSchema(registryId: number): Promise<Schema> {
     const schema = this.cache.getSchema(registryId)
+
     if (schema) {
       return schema
     }
 
-    const response = await this.api.Schema.find({ id: registryId })
+    const response = await this.getSchemaOriginRequest(registryId)
     const foundSchema: { schema: string } = response.data()
     const rawSchema: Schema = JSON.parse(foundSchema.schema)
 
@@ -122,11 +141,29 @@ export default class SchemaRegistry {
     return schema.fromBuffer(payload)
   }
 
-  public async getRegistryId(subject: string, version: number): Promise<number> {
+  public async getRegistryId(subject: string, version: number | string): Promise<number> {
     const response = await this.api.Subject.version({ subject, version })
     const { id }: { id: number } = response.data()
 
     return id
+  }
+
+  public async getRegistryIdBySchema(subject: string, schema: Schema): Promise<number> {
+    try {
+      const response = await this.api.Subject.registered({
+        subject,
+        body: { schema: JSON.stringify(schema) },
+      })
+      const { id }: { id: number } = response.data()
+
+      return id
+    } catch (error) {
+      if (error.status && error.status === 404) {
+        throw new ConfluentSchemaRegistryError(error)
+      }
+
+      throw error
+    }
   }
 
   public async getLatestSchemaId(subject: string): Promise<number> {
@@ -134,5 +171,20 @@ export default class SchemaRegistry {
     const { id }: { id: number } = response.data()
 
     return id
+  }
+
+  private getSchemaOriginRequest(registryId: number) {
+    // ensure that cache-misses result in a single origin request
+    if (this.cacheMissRequests[registryId]) {
+      return this.cacheMissRequests[registryId]
+    } else {
+      const request = this.api.Schema.find({ id: registryId }).finally(() => {
+        delete this.cacheMissRequests[registryId]
+      })
+
+      this.cacheMissRequests[registryId] = request
+
+      return request
+    }
   }
 }

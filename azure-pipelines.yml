@@ -25,11 +25,24 @@ jobs:
     steps:
       - task: NodeTool@0
         inputs:
-          versionSpec: '8.x'
+          versionSpec: '12.x'
       - bash: yarn install
         displayName: yarn install
       - bash: yarn lint
         displayName: yarn lint
+
+  - job: build
+    displayName: Build
+    pool:
+      vmImage: 'Ubuntu 16.04'
+    steps:
+      - task: NodeTool@0
+        inputs:
+          versionSpec: '12.x'
+      - bash: yarn install
+        displayName: yarn install
+      - bash: yarn build
+        displayName: yarn build
 
   - job: unit_tests
     displayName: Tests
@@ -39,7 +52,7 @@ jobs:
     steps:
       - task: NodeTool@0
         inputs:
-          versionSpec: '8.x'
+          versionSpec: '12.x'
       - bash: yarn install
         displayName: yarn install
       - bash: docker-compose -f ${COMPOSE_FILE} pull
@@ -52,13 +65,14 @@ jobs:
     condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'))
     dependsOn:
       - lint
+      - build
       - unit_tests
     pool:
       vmImage: 'Ubuntu 16.04'
     steps:
       - task: NodeTool@0
         inputs:
-          versionSpec: '8.x'
+          versionSpec: '12.x'
       - bash: yarn install
         displayName: yarn install
       - bash: yarn prepare:release
@@ -85,7 +99,7 @@ jobs:
     steps:
       - task: NodeTool@0
         inputs:
-          versionSpec: '8.x'
+          versionSpec: '12.x'
       - bash: git config core.autocrlf true || test true
         displayName: git config core.autocrlf
       - bash: git config --global user.name "${GH_NAME}" || test true
